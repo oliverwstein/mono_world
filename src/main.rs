@@ -1,8 +1,6 @@
 use ansi_term::Colour::RGB;
 use rand::Rng;
 use std::process::Command;
-use std::thread;
-use std::time::Duration;
 
 mod world; mod entity; mod components;
 
@@ -95,6 +93,5 @@ fn main() {
             println!(); // New line for the next row
         }
 
-        // thread::sleep(Duration::from_millis(50));
     }
 }
