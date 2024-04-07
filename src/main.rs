@@ -94,6 +94,6 @@ fn main() {
             println!(); // New line for the next row
         }
 
-        thread::sleep(Duration::from_millis(1));
+        // thread::sleep(Duration::from_millis(50));
     }
 }

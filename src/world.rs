@@ -163,8 +163,8 @@ impl World {
 
         let new_fertile: Vec<_> = self.humans.iter()
             .map(|(e,_ )| *e)
-            .filter(|entity| self.females.contains_key(entity) && !self.fertile.contains_key(entity) && get_age(self.day, self.ages.get(entity).unwrap().date).ge(&(365 * 14)) && get_age(self.day, self.ages.get(entity).unwrap().date).le(&(365 * 50)))
-            .filter(|_| rng.gen_bool(0.015) )
+            .filter(|entity| self.females.contains_key(entity) && !self.fertile.contains_key(entity) && !self.pregnant.contains_key(entity) && get_age(self.day, self.ages.get(entity).unwrap().date).ge(&(365 * 14)) && get_age(self.day, self.ages.get(entity).unwrap().date).le(&(365 * 50)))
+            .filter(|entity| rng.gen_bool(0.015 / (self.children.get(entity).map_or(1.0, |children| children.len().max(1) as f64)/2.0)))
             .map(|entity| (entity, Fertile))
             .collect();
 
