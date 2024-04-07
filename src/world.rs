@@ -145,9 +145,9 @@ impl World {
     }
 
     pub fn fertility_system(&mut self) {
-        for &entity in self.humans.iter().filter(|e| matches!(self.sexes.get(e), Some(Sex::Female)) && (get_age(self.day, self.ages.get(&entity).unwrap().date) >= 365*14))  {
+        // for &entity in self.humans.iter().filter(|e| matches!(self.sexes.get(e), Some(Sex::Female)) && (get_age(self.day, self.ages.get(&entity).unwrap().date) >= 365*14))  {
             
-        }
+        // }
     }
 
     pub fn time_system(&mut self) {
