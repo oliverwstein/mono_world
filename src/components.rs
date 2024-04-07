@@ -24,8 +24,7 @@ pub enum Sex {
     Female,
 }
 
-pub struct Fertile {
-}
+pub struct Fertile;
 
 pub struct Pregnant {
     pub due_date: u32,

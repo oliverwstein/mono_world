@@ -1,7 +1,7 @@
 use rand::rngs::ThreadRng;
 use rand::Rng;
 use std::collections::{HashMap, HashSet};
-use crate::components::{Position, Life, SpawnDate, Sex, Human, Forage};
+use crate::components::{Fertile, Forage, Human, Life, Position, Pregnant, Sex, SpawnDate};
 use crate::entity::Entity;
 
 pub struct World {
@@ -15,8 +15,12 @@ pub struct World {
     pub forages: HashMap<Entity, Forage>,
     pub residents: HashMap<Position, HashSet<Entity>>,
     pub mates: HashMap<Entity, Entity>,
-
+    pub parents: HashMap<Entity, Vec<Entity>>,
+    pub children: HashMap<Entity, Vec<Entity>>,
+    pub fertile: HashMap<Entity, Fertile>,
+    pub pregnant: HashMap<Entity, Pregnant>,
 }
+
 
 impl World {
     pub fn new() -> Self {
@@ -31,6 +35,10 @@ impl World {
             forages: HashMap::new(),
             residents: HashMap::new(),
             mates: HashMap::new(),
+            fertile: HashMap::new(),
+            pregnant: HashMap::new(),
+            parents: HashMap::new(),
+            children: HashMap::new(),
         }
     }
     
@@ -145,9 +153,49 @@ impl World {
     }
 
     pub fn fertility_system(&mut self) {
-        // for &entity in self.humans.iter().filter(|e| matches!(self.sexes.get(e), Some(Sex::Female)) && (get_age(self.day, self.ages.get(&entity).unwrap().date) >= 365*14))  {
-            
-        // }
+        let mut rng = rand::thread_rng();
+
+        let new_fertile: Vec<_> = self.humans.iter()
+            .map(|(e,_ )| *e)
+            .filter(|entity| matches!(self.sexes.get(entity), Some(Sex::Female)) && !self.fertile.contains_key(entity) && get_age(self.day, self.ages.get(entity).unwrap().date).ge(&(365 * 14)) && get_age(self.day, self.ages.get(entity).unwrap().date).le(&(365 * 50)))
+            .filter(|_| rng.gen_bool(0.03) )
+            .map(|entity| (entity, Fertile))
+            .collect();
+
+        self.fertile.extend(new_fertile);
+    }
+
+    pub fn conception_system(&mut self) {
+        let conceptions: Vec<_> = self.humans.iter()
+            .map(|(e,_ )| *e)
+            .filter(|entity| self.fertile.contains_key(entity) && self.mates.contains_key(entity))
+            .filter(|_| rand::thread_rng().gen_bool(0.03) )
+            .map(|entity| (entity, Pregnant { due_date: self.day + rand::thread_rng().gen_range(260..=300) }))
+            .collect();
+
+        for (e, _p) in conceptions.iter(){self.fertile.remove(e);}
+        self.pregnant.extend(conceptions);
+    }
+
+    pub fn birth_system(&mut self) {
+        let births: Vec<_> = self.humans.iter()
+            .map(|(e,_ )| *e)
+            .filter(|entity| self.pregnant.contains_key(entity) && self.day.ge(&self.pregnant[entity].due_date))
+            .collect();
+
+        for e in births.iter(){
+            self.pregnant.remove(e);
+            let sex = if rand::thread_rng().gen_bool(0.5) { Sex::Male } else { Sex::Female };
+            let child = self.spawn_person(self.positions[e].x, self.positions[e].y, self.day as i32, sex);
+            self.parents.insert(child, vec![*e, self.mates[e]]);
+            self.children.entry(*e)
+                .or_insert_with(Vec::new)
+                .push(child);
+            self.children.entry(self.mates[e])
+                .or_insert_with(Vec::new)
+                .push(child);
+
+        }
     }
 
     pub fn time_system(&mut self) {
@@ -177,12 +225,17 @@ impl World {
                 0.01 + (difference as f64 * 0.1).min(0.19) // Increasingly likely to move as difference grows
             };
 
-            //Singles move
+            // Families move
             for entity in residents.iter().filter(|e| self.humans.contains_key(e) && matches!(self.sexes.get(e), Some(Sex::Male))) {
                 if rng.gen_bool(move_probability) {
                     let movement = generate_random_move(&mut rng);
                     moves.push((*entity, position.x + movement.0, position.y + movement.1));
                     self.mates.get(entity).inspect(|mate| moves.push((**mate, position.x + movement.0, position.y + movement.1)));
+                    if let Some(children) = self.children.get(entity) {
+                        for &child_id in children {
+                            moves.push((child_id, position.x + movement.0, position.y + movement.1));
+                        }
+                    }
                 }
             }
             for entity in residents.iter().filter(|e| self.humans.contains_key(e) && matches!(self.sexes.get(e), Some(Sex::Female)) && !self.mates.contains_key(e)) {

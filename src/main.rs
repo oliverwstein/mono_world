@@ -1,6 +1,7 @@
 use ansi_term::Colour::RGB;
 use components::Sex;
 use rand::Rng;
+use std::ops::Rem;
 use std::process::Command;
 use std::thread;
 use std::time::Duration;
@@ -34,11 +35,15 @@ fn main() {
     
 
     loop {
-        world.matchmaker_system();
-        world.move_system();
         world.time_system();
+        world.matchmaker_system();
+        world.fertility_system();
+        world.conception_system();
+        world.birth_system();
+        world.move_system();
         clear_console();
-        println!("Day {}", world.day);
+        
+        println!("Year {}, Day {}, Humans {}, Coupled {}, Pregnant {}", 1 + world.day / 365, world.day % 365, world.humans.len(), world.mates.len(), world.pregnant.len());
         let mut min_x = 0;
         let mut max_x = 0;
         let mut min_y = 0;
