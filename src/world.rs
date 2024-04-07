@@ -51,6 +51,40 @@ impl World {
         entity
     }
 
+    pub fn remove_entity(&mut self, entity: Entity) {
+        // Remove the entity from each HashMap or HashSet where it might be referenced
+        self.positions.remove(&entity);
+        self.lives.remove(&entity);
+        self.ages.remove(&entity);
+        self.males.remove(&entity);
+        self.females.remove(&entity);
+        self.humans.remove(&entity);
+        self.forages.remove(&entity);
+        self.fertile.remove(&entity);
+        self.pregnant.remove(&entity);
+
+        // Special handling for residents since it's a HashMap<Position, HashSet<Entity>>
+        for (_position, entities) in self.residents.iter_mut() {
+            entities.remove(&entity);
+        }
+
+        // Remove entity from mates, if applicable
+        if let Some(mate) = self.mates.remove(&entity) {
+            // Also remove the reverse mapping
+            self.mates.remove(&mate);
+        }
+
+        // Remove entity from parents and children mappings
+        self.parents.remove(&entity);
+        self.children.remove(&entity);
+
+        // Additional handling might be necessary if you want to remove an entity from 
+        // its children's records or from its parents' records.
+
+        // Note: This is a straightforward approach; optimizations or additional logic 
+        // may be required based on your specific needs or data consistency rules.
+    }
+
     pub fn add_position(&mut self, entity: Entity, x: i32, y: i32) {
         self.positions.insert(entity, Position { x, y });
         self.residents.entry(Position { x, y })
@@ -193,15 +227,35 @@ impl World {
             self.pregnant.remove(e);
             let sex = if rand::thread_rng().gen_bool(0.5) { "male" } else { "female" };
             let child = self.spawn_person(self.positions[e].x, self.positions[e].y, self.day as i32, sex.to_owned());
-            self.parents.insert(child, vec![*e, self.mates[e]]);
-            self.children.entry(*e)
-                .or_insert_with(Vec::new)
-                .push(child);
-            self.children.entry(self.mates[e])
-                .or_insert_with(Vec::new)
-                .push(child);
-
+            let mut parent_vec = vec![*e];
+            if let Some(mate) = self.mates.get(e) {
+                parent_vec.push(*mate);
+            }
+            // Clone parent_vec before inserting
+            self.parents.insert(child, parent_vec.clone()); // Clone for insert
+            for parent in parent_vec { // Now safe to use parent_vec after clone
+                self.children.entry(parent)
+                    .or_insert_with(Vec::new)
+                    .push(child);
+            }
         }
+    }
+
+    pub fn death_system(&mut self) {
+        let mut rng = rand::thread_rng();
+        let deaths: Vec<_> = self.humans.iter()
+            .map(|(e, _)| *e)
+            .filter(|entity| {
+                let birthdate = self.ages.get(entity).unwrap();
+                let death_probability_base = 0.001;
+                let age_mod = base_death_rate(self.day, birthdate.date);
+                rng.gen_bool((death_probability_base * age_mod).clamp(0.0, 1.0))
+            })
+            .collect();
+        for e in deaths.iter(){
+            self.remove_entity(*e);
+        }
+        
     }
 
     pub fn time_system(&mut self) {
@@ -225,14 +279,17 @@ impl World {
             // Calculate the likelihood of moving based on human count and forage bounty
             let difference = human_count as i32 - forage_bounty as i32;
             let move_probability = 
-            if difference <= 0 {
+            if human_count == 1 {
+                0.5 // Very likely to move if alone
+            }
+            else if difference <= 0 {
                 0.01 // Very unlikely to move if forage bounty is enough
             } else {
                 0.01 + (difference as f64 * 0.1).min(0.19) // Increasingly likely to move as difference grows
             };
 
             // Families move
-            for entity in residents.iter().filter(|e| self.humans.contains_key(e) && self.males.contains_key(e)) {
+            for entity in residents.iter().filter(|e| self.humans.contains_key(e) && self.males.contains_key(e) && get_age(self.day, self.ages.get(e).unwrap().date).ge(&(365 * 14))) {
                 if rng.gen_bool(move_probability) {
                     let movement = generate_random_move(&mut rng, *position);
                     moves.push((*entity, position.x + movement.0, position.y + movement.1));
@@ -244,7 +301,7 @@ impl World {
                     }
                 }
             }
-            for entity in residents.iter().filter(|e| self.humans.contains_key(e) && self.females.contains_key(e) && !self.mates.contains_key(e)) {
+            for entity in residents.iter().filter(|e| self.humans.contains_key(e) && self.females.contains_key(e) && !self.mates.contains_key(e) && get_age(self.day, self.ages.get(e).unwrap().date).ge(&(365 * 14))) {
                 if rng.gen_bool(move_probability) {
                     let movement = generate_random_move(&mut rng, *position);
                     moves.push((*entity, position.x + movement.0, position.y + movement.1));
@@ -264,6 +321,27 @@ impl World {
 fn get_age(day: u32, birthday: i32) -> u32 {
     let age = day as i32 - birthday;
     age as u32
+}
+
+fn base_death_rate(current_day: u32, birthdate: i32) -> f64 {
+    let age_years = (current_day as i32 - birthdate) as f64 / 365.0; // Assuming 365 days per year for simplicity
+
+    if age_years <= 18.0 {
+        // Decay to 0.1 at age 18
+        // Formula: a * exp(-b * x) + c, ensuring it's 1 at x=0 and 0.1 at x=18
+        let a = 0.9;
+        let b = -1.0 * (0.1_f64.ln() - 1.0_f64.ln()) / 18.0;
+        let c = 0.1;
+        return a * (-b * age_years).exp() + c;
+    } else {
+        // Grow to 2.0 by age 80
+        // Formula: a * exp(b * x) + c, ensuring it's 0.1 at x=18 and 2 at x=80
+        let x_shifted = age_years - 18.0; // Shift the x-axis to start at 0 for this phase
+        let a = 1.9;
+        let b = (2.0_f64.ln() - 0.1_f64.ln()) / (80.0 - 18.0);
+        let c = 0.1 - a * (b * 18.0).exp(); // Adjust to ensure continuity at x=18
+        return a * (b * x_shifted).exp() + c;
+    }
 }
 
 fn generate_random_move(mut rng: &mut ThreadRng, position: Position) -> (i32, i32) {
