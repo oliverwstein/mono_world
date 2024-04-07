@@ -1,7 +1,7 @@
 use rand::rngs::ThreadRng;
 use rand::Rng;
 use std::collections::{HashMap, HashSet};
-use crate::components::{Fertile, Forage, Human, Life, Position, Pregnant, Sex, SpawnDate};
+use crate::components::{Fertile, Forage, Human, Life, Position, Pregnant, Male, Female, SpawnDate};
 use crate::entity::Entity;
 
 pub struct World {
@@ -10,7 +10,8 @@ pub struct World {
     pub positions: HashMap<Entity, Position>,
     pub lives: HashMap<Entity, Life>,
     pub ages: HashMap<Entity, SpawnDate>,
-    pub sexes: HashMap<Entity, Sex>,
+    pub males: HashMap<Entity, Male>,
+    pub females: HashMap<Entity, Female>,
     pub humans: HashMap<Entity, Human>,
     pub forages: HashMap<Entity, Forage>,
     pub residents: HashMap<Position, HashSet<Entity>>,
@@ -30,7 +31,8 @@ impl World {
             positions: HashMap::new(),
             lives: HashMap::new(),
             ages: HashMap::new(),
-            sexes: HashMap::new(),
+            males: HashMap::new(),
+            females: HashMap::new(),
             humans: HashMap::new(),
             forages: HashMap::new(),
             residents: HashMap::new(),
@@ -97,11 +99,16 @@ impl World {
         self.ages.insert(entity, SpawnDate { date });
     }
 
-    pub fn add_sex(&mut self, entity: Entity, sex: Sex) {
-        self.sexes.insert(entity, sex);
+    pub fn add_sex(&mut self, entity: Entity, sex: String) {
+        if sex == "male" {
+            self.males.insert(entity, Male);
+        } else {
+            self.females.insert(entity, Female);
+        }
+        
     }
 
-    pub fn spawn_person(&mut self, x:i32, y: i32, age_days: i32, sex: Sex) -> Entity {
+    pub fn spawn_person(&mut self, x:i32, y: i32, age_days: i32, sex: String) -> Entity {
         let entity = self.create_entity();
         self.add_position(entity, x, y);
         self.add_life(entity);
@@ -129,15 +136,14 @@ impl World {
 
             // Populate bachelors and spinsters
             for &entity in residents.iter() {
-                if self.humans.contains_key(&entity) && !self.mates.contains_key(&entity) && (get_age(self.day, self.ages.get(&entity).unwrap().date) >= 365*16) {
-                    match self.sexes.get(&entity) {
-                        Some(Sex::Male) => bachelors.push(entity),
-                        Some(Sex::Female) => spinsters.push(entity),
-                        None => (),
+                if self.humans.contains_key(&entity) && !self.mates.contains_key(&entity) && (get_age(self.day, self.ages.get(&entity).unwrap().date) >= 365*16){
+                    if self.males.contains_key(&entity) {
+                        bachelors.push(entity);
+                    } else {
+                        spinsters.push(entity);
                     }
                 }
             }
-
             // Shuffle both groups to randomize pairing
             let mut rng = rand::thread_rng();
 
@@ -157,8 +163,8 @@ impl World {
 
         let new_fertile: Vec<_> = self.humans.iter()
             .map(|(e,_ )| *e)
-            .filter(|entity| matches!(self.sexes.get(entity), Some(Sex::Female)) && !self.fertile.contains_key(entity) && get_age(self.day, self.ages.get(entity).unwrap().date).ge(&(365 * 14)) && get_age(self.day, self.ages.get(entity).unwrap().date).le(&(365 * 50)))
-            .filter(|_| rng.gen_bool(0.03) )
+            .filter(|entity| self.females.contains_key(entity) && !self.fertile.contains_key(entity) && get_age(self.day, self.ages.get(entity).unwrap().date).ge(&(365 * 14)) && get_age(self.day, self.ages.get(entity).unwrap().date).le(&(365 * 50)))
+            .filter(|_| rng.gen_bool(0.015) )
             .map(|entity| (entity, Fertile))
             .collect();
 
@@ -185,8 +191,8 @@ impl World {
 
         for e in births.iter(){
             self.pregnant.remove(e);
-            let sex = if rand::thread_rng().gen_bool(0.5) { Sex::Male } else { Sex::Female };
-            let child = self.spawn_person(self.positions[e].x, self.positions[e].y, self.day as i32, sex);
+            let sex = if rand::thread_rng().gen_bool(0.5) { "male" } else { "female" };
+            let child = self.spawn_person(self.positions[e].x, self.positions[e].y, self.day as i32, sex.to_owned());
             self.parents.insert(child, vec![*e, self.mates[e]]);
             self.children.entry(*e)
                 .or_insert_with(Vec::new)
@@ -226,9 +232,9 @@ impl World {
             };
 
             // Families move
-            for entity in residents.iter().filter(|e| self.humans.contains_key(e) && matches!(self.sexes.get(e), Some(Sex::Male))) {
+            for entity in residents.iter().filter(|e| self.humans.contains_key(e) && self.males.contains_key(e)) {
                 if rng.gen_bool(move_probability) {
-                    let movement = generate_random_move(&mut rng);
+                    let movement = generate_random_move(&mut rng, *position);
                     moves.push((*entity, position.x + movement.0, position.y + movement.1));
                     self.mates.get(entity).inspect(|mate| moves.push((**mate, position.x + movement.0, position.y + movement.1)));
                     if let Some(children) = self.children.get(entity) {
@@ -238,9 +244,9 @@ impl World {
                     }
                 }
             }
-            for entity in residents.iter().filter(|e| self.humans.contains_key(e) && matches!(self.sexes.get(e), Some(Sex::Female)) && !self.mates.contains_key(e)) {
+            for entity in residents.iter().filter(|e| self.humans.contains_key(e) && self.females.contains_key(e) && !self.mates.contains_key(e)) {
                 if rng.gen_bool(move_probability) {
-                    let movement = generate_random_move(&mut rng);
+                    let movement = generate_random_move(&mut rng, *position);
                     moves.push((*entity, position.x + movement.0, position.y + movement.1));
                 }
             }
@@ -260,18 +266,46 @@ fn get_age(day: u32, birthday: i32) -> u32 {
     age as u32
 }
 
-fn generate_random_move(mut rng: &mut ThreadRng) -> (i32, i32) {
-    if rng.gen_bool(0.5) {
-        if rng.gen_bool(0.5) {
-            (1, 0) // Move right
-        } else {
-            (-1, 0) // Move left
-        }
+fn generate_random_move(mut rng: &mut ThreadRng, position: Position) -> (i32, i32) {
+    let mut move_x = 0;
+    let mut move_y = 0;
+    
+    // Adjust movement probability based on x position
+    if position.x <= -50 {
+        move_x = 1; // Must move right
+    } else if position.x >= 50 {
+        move_x = -1; // Must move left
     } else {
-        if rng.gen_bool(0.5) {
-            (0, 1) // Move up
-        } else {
-            (0, -1) // Move down
+        // Probability decreases as it gets further from center
+        let prob_move_right = 0.5 - (position.x as f64 / 100.0); // Increase as x decreases
+        
+        if rng.gen_bool(prob_move_right) {
+            move_x = 1;
+        } else if rng.gen_bool(1.0-prob_move_right) {
+            move_x = -1;
         }
     }
+    
+    // Adjust movement probability based on y position
+    if position.y <= -50 {
+        move_y = 1; // Must move up
+    } else if position.y >= 50 {
+        move_y = -1; // Must move down
+    } else {
+        // Similar to x, but for y position
+        let prob_move_up = 0.5 - (position.y as f64 / 100.0);        
+        if rng.gen_bool(prob_move_up) {
+            move_y = 1;
+        } else if rng.gen_bool(1.0 - prob_move_up) {
+            move_y = -1;
+        }
+    }
+
+    // If both move_x and move_y are 0, force a move in any direction
+    if move_x == 0 && move_y == 0 {
+        if rng.gen_bool(0.5) { move_x = if rng.gen_bool(0.5) { 1 } else { -1 }; }
+        else { move_y = if rng.gen_bool(0.5) { 1 } else { -1 }; }
+    }
+    
+    (move_x, move_y)
 }

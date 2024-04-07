@@ -1,7 +1,5 @@
 use ansi_term::Colour::RGB;
-use components::Sex;
 use rand::Rng;
-use std::ops::Rem;
 use std::process::Command;
 use std::thread;
 use std::time::Duration;
@@ -28,8 +26,8 @@ fn main() {
     // Spawn 100 living entities at (0, 0)
     for _ in 0..100 {
         let age_days = -1*rng.gen_range(18*365..=30*365);
-        let sex = if rng.gen_bool(0.5) { Sex::Male } else { Sex::Female };
-        world.spawn_person(0, 0, age_days, sex);
+        let sex = if rng.gen_bool(0.5) { "male" } else { "female" };
+        world.spawn_person(0, 0, age_days, sex.to_owned());
     }
     world.spawn_resources(0, 0, rng.gen_range(1..=10));
     
@@ -43,7 +41,7 @@ fn main() {
         world.move_system();
         clear_console();
         
-        println!("Year {}, Day {}, Humans {}, Coupled {}, Pregnant {}", 1 + world.day / 365, world.day % 365, world.humans.len(), world.mates.len(), world.pregnant.len());
+        println!("Year {}, Day {}, Humans {}, Males {}, Women {}, Coupled {}, Pregnant {}", 1 + world.day / 365, world.day % 365, world.humans.len(), world.males.len(), world.females.len(), world.mates.len(), world.pregnant.len());
         let mut min_x = 0;
         let mut max_x = 0;
         let mut min_y = 0;
@@ -96,6 +94,6 @@ fn main() {
             println!(); // New line for the next row
         }
 
-        thread::sleep(Duration::from_millis(10));
+        thread::sleep(Duration::from_millis(1));
     }
 }

@@ -19,10 +19,8 @@ pub struct Forage {
     pub bounty: u32,
 }
 
-pub enum Sex {
-    Male,
-    Female,
-}
+pub struct Male;
+pub struct Female;
 
 pub struct Fertile;
 
