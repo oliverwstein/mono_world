@@ -51,6 +51,27 @@ impl World {
         entity
     }
 
+    pub fn die(&mut self, entity: Entity) {
+        self.positions.remove(&entity);
+        self.lives.remove(&entity);
+        self.ages.remove(&entity);
+        self.males.remove(&entity);
+        self.females.remove(&entity);
+        self.humans.remove(&entity);
+        self.fertile.remove(&entity);
+        self.pregnant.remove(&entity);
+
+        // Special handling for residents since it's a HashMap<Position, HashSet<Entity>>
+        for (_position, entities) in self.residents.iter_mut() {
+            entities.remove(&entity);
+        }
+
+        // Remove entity from mates, if applicable
+        if let Some(mate) = self.mates.remove(&entity) {
+            // Also remove the reverse mapping
+            self.mates.remove(&mate);
+        }
+    }
     pub fn remove_entity(&mut self, entity: Entity) {
         // Remove the entity from each HashMap or HashSet where it might be referenced
         self.positions.remove(&entity);
@@ -59,7 +80,6 @@ impl World {
         self.males.remove(&entity);
         self.females.remove(&entity);
         self.humans.remove(&entity);
-        self.forages.remove(&entity);
         self.fertile.remove(&entity);
         self.pregnant.remove(&entity);
 
@@ -78,11 +98,6 @@ impl World {
         self.parents.remove(&entity);
         self.children.remove(&entity);
 
-        // Additional handling might be necessary if you want to remove an entity from 
-        // its children's records or from its parents' records.
-
-        // Note: This is a straightforward approach; optimizations or additional logic 
-        // may be required based on your specific needs or data consistency rules.
     }
 
     pub fn add_position(&mut self, entity: Entity, x: i32, y: i32) {
@@ -184,7 +199,7 @@ impl World {
             // Determine the number of pairs to form based on the smaller group
             let mates = bachelors.into_iter()
                 .zip(spinsters.into_iter())
-                .filter(|_| rng.gen_bool(0.25))
+                .filter(|_| rng.gen_bool(0.5))
                 .flat_map(|(bachelor, spinster)| vec![(bachelor, spinster), (spinster, bachelor)]);
 
             self.mates.extend(mates);
@@ -209,7 +224,7 @@ impl World {
         let conceptions: Vec<_> = self.humans.iter()
             .map(|(e,_ )| *e)
             .filter(|entity| self.fertile.contains_key(entity) && self.mates.contains_key(entity))
-            .filter(|_| rand::thread_rng().gen_bool(0.03) )
+            .filter(|_| rand::thread_rng().gen_bool(0.015) )
             .map(|entity| (entity, Pregnant { due_date: self.day + rand::thread_rng().gen_range(260..=300) }))
             .collect();
 
@@ -253,7 +268,7 @@ impl World {
             })
             .collect();
         for e in deaths.iter(){
-            self.remove_entity(*e);
+            self.die(*e);
         }
         
     }
@@ -289,20 +304,22 @@ impl World {
             };
 
             // Families move
-            for entity in residents.iter().filter(|e| self.humans.contains_key(e) && self.males.contains_key(e) && get_age(self.day, self.ages.get(e).unwrap().date).ge(&(365 * 14))) {
+            for entity in residents.iter().filter(|e| self.humans.contains_key(e) && self.males.contains_key(e) && self.mates.contains_key(e)) {
                 if rng.gen_bool(move_probability) {
                     let movement = generate_random_move(&mut rng, *position);
                     moves.push((*entity, position.x + movement.0, position.y + movement.1));
                     self.mates.get(entity).inspect(|mate| moves.push((**mate, position.x + movement.0, position.y + movement.1)));
                     if let Some(children) = self.children.get(entity) {
-                        for &child_id in children {
-                            moves.push((child_id, position.x + movement.0, position.y + movement.1));
+                        for &child in children {
+                            if let Some(child_position) = self.positions.get(&child) {
+                                moves.push((child, child_position.x + movement.0, child_position.y + movement.1));
+                            }
                         }
                     }
                 }
             }
-            for entity in residents.iter().filter(|e| self.humans.contains_key(e) && self.females.contains_key(e) && !self.mates.contains_key(e) && get_age(self.day, self.ages.get(e).unwrap().date).ge(&(365 * 14))) {
-                if rng.gen_bool(move_probability) {
+            for entity in residents.iter().filter(|e| self.humans.contains_key(e) && !self.mates.contains_key(e) && get_age(self.day, self.ages.get(e).unwrap().date).ge(&(365 * 14))) {
+                if rng.gen_bool((move_probability + 0.1).clamp(0.0, 1.0)) {
                     let movement = generate_random_move(&mut rng, *position);
                     moves.push((*entity, position.x + movement.0, position.y + movement.1));
                 }
