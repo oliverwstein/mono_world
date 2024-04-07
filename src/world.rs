@@ -295,7 +295,7 @@ impl World {
             let difference = human_count as i32 - forage_bounty as i32;
             let move_probability = 
             if human_count == 1 {
-                0.5 // Very likely to move if alone
+                0.9 // Very likely to move if alone
             }
             else if difference <= 0 {
                 0.01 // Very unlikely to move if forage bounty is enough
@@ -322,6 +322,13 @@ impl World {
                 if rng.gen_bool((move_probability + 0.1).clamp(0.0, 1.0)) {
                     let movement = generate_random_move(&mut rng, *position);
                     moves.push((*entity, position.x + movement.0, position.y + movement.1));
+                    if let Some(children) = self.children.get(entity) {
+                        for &child in children {
+                            if let Some(child_position) = self.positions.get(&child) {
+                                moves.push((child, child_position.x + movement.0, child_position.y + movement.1));
+                            }
+                        }
+                    }
                 }
             }
         }

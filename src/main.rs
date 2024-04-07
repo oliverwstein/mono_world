@@ -24,7 +24,7 @@ fn main() {
     let mut world = world::World::new();
     let mut rng = rand::thread_rng();
     // Spawn 100 living entities at (0, 0)
-    for _ in 0..1000 {
+    for _ in 0..10000 {
         let age_days = -1*rng.gen_range(18*365..=30*365);
         let sex = if rng.gen_bool(0.5) { "male" } else { "female" };
         world.spawn_person(0, 0, age_days, sex.to_owned());
