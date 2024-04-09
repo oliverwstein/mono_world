@@ -1,29 +1,23 @@
-#[derive(PartialEq, Eq, Hash, Clone, Copy)]
-pub struct Position {
-    pub x: i32,
-    pub y: i32,
-}
+#[derive(PartialEq, Eq, Hash, Clone, Copy, Default)]
+pub struct Position(pub u32);
 
-pub struct Life {
-}
+#[derive(Clone, Copy, Default)]
+pub struct Life(pub bool);
 
+#[derive(Clone, Copy, Default)]
+pub struct Human(pub bool);
+#[derive(Clone, Copy, Default)]
+pub struct SpawnDate (pub u32);
+#[derive(Clone, Copy, Default)]
+pub struct Forage(pub u8);
+#[derive(Clone, Copy, Default)]
+pub struct Male(pub bool);
 
-pub struct Human {
-}
+#[derive(Clone, Copy, Default)]
+pub struct Female(pub bool);
 
-pub struct SpawnDate {
-    pub date: i32, // Age in days
-}
+#[derive(Clone, Copy, Default)]
+pub struct Fertile(pub bool);
 
-pub struct Forage {
-    pub bounty: u32,
-}
-
-pub struct Male;
-pub struct Female;
-
-pub struct Fertile;
-
-pub struct Pregnant {
-    pub due_date: u32,
-}
+#[derive(Clone, Copy, Default)]
+pub struct Pregnant(pub u32);
