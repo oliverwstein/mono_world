@@ -1,7 +1,5 @@
 use rand::Rng;
 use std::collections::{HashMap, HashSet};
-use crate::entity::Entity;
-
 pub struct World {
     pub day: usize,
     pub entities: usize,
@@ -16,8 +14,8 @@ pub struct World {
     pub forages: Vec<u8>,
     pub residents: HashMap<usize, HashSet<usize>>,
     pub mates: Vec<usize>,
-    pub parents: Vec<[usize; 2]>,
-    pub children: Vec<[usize; 16]>,
+    pub parents: HashMap<usize, Vec<usize>>,
+    pub children: HashMap<usize, HashSet<usize>>,
     pub fertile: Vec<bool>,
     pub pregnant: Vec<usize>,
 }
@@ -48,16 +46,14 @@ impl World {
             mates: vec![0; 65535],
             fertile: vec![false; 65535],
             pregnant:vec![0; 65535],
-            parents: Vec::new(),
-            children: Vec::new(),
+            parents: HashMap::new(),
+            children: HashMap::new(),
         }
     }
     
-    pub fn create_entity(&mut self) -> Entity {
-        let entity = Entity(self.entities);
+    pub fn create_entity(&mut self) -> usize {
         self.entities += 1;
-
-        entity
+        self.entities
     }
 
     pub fn die(&mut self, index: usize) {
@@ -106,38 +102,41 @@ impl World {
         self.residents.entry(new_position).or_insert_with(HashSet::new).insert(entity);
     }
 
-    pub fn set_position(&mut self, entity: Entity, x: usize, y: usize) {
-        self.positions[entity.0] = self.xy_to_index(x, y);
+    pub fn set_position(&mut self, entity: usize, x: usize, y: usize) {
+        let position_id = self.xy_to_index(x, y);
+        self.positions[entity] = position_id;
+        self.residents.entry(position_id).or_insert_with(HashSet::new).insert(entity);
     }
 
-    pub fn set_life(&mut self, entity: Entity) {
-        self.lives[entity.0] = true;
+    pub fn set_life(&mut self, entity: usize) {
+        self.lives[entity] = true;
     }
 
-    pub fn set_human(&mut self, entity: Entity) {
-        self.humans[entity.0] = true;
+    pub fn set_human(&mut self, entity: usize) {
+        self.humans[entity] = true;
     }
 
-    pub fn set_age(&mut self, entity: Entity, date: usize) {
-        self.spawn_dates[entity.0] = date;
+    pub fn set_age(&mut self, entity: usize, date: usize) {
+        self.spawn_dates[entity] = date;
     }
 
-    pub fn set_sex(&mut self, entity: Entity, sex: String) {
+    pub fn set_sex(&mut self, entity: usize, sex: String) {
         if sex == "male" {
-            self.males[entity.0] = true;
+            self.males[entity] = true;
         } else {
-            self.females[entity.0] = true;
+            self.females[entity] = true;
         }
         
     }
 
-    pub fn spawn_person(&mut self, x:usize, y: usize, age_days: usize, sex: String) -> Entity {
+    pub fn spawn_person(&mut self, x:usize, y: usize, age_days: usize, sex: String) -> usize {
         let entity = self.create_entity();
         self.set_position(entity, x, y);
         self.set_life(entity);
         self.set_human(entity);
         self.set_age(entity, age_days);
         self.set_sex(entity, sex);
+        self.children.insert(entity, HashSet::new());
         entity
     }
 
@@ -148,7 +147,7 @@ impl World {
 
             // Populate bachelors and spinsters
             for &entity in residents.iter() {
-                if self.humans[entity] && self.mates[entity] != 0 && (get_age(self.day, self.spawn_dates[entity]) >= 365*16){
+                if self.humans[entity] && self.mates[entity] == 0 && (get_age(self.day, self.spawn_dates[entity]) >= 365*16){
                     if self.males[entity] {
                         bachelors.push(entity);
                     } else {
@@ -180,11 +179,9 @@ impl World {
         for (index, &is_female) in self.females.iter().enumerate() {
             // Check if the entity is human, female, not already fertile or pregnant, and within the age range
             if self.humans[index] && is_female && !self.fertile[index] && self.pregnant[index] == 0 {
-                let age = self.spawn_dates[index]; // Assuming age is directly stored as days
+                let age = get_age(self.day, self.spawn_dates[index]);
                 if age >= 365 * 14 && age <= 365 * 50 {
-                    let children_count = self.children[index].iter().sum::<usize>();
-                    let fertility_chance = 0.015 / ((children_count.max(1) as f64) / 2.0);
-                    if rng.gen_bool(fertility_chance) {
+                    if rng.gen_bool(0.015) {
                         self.fertile[index] = true;
                     }
                 }
@@ -217,7 +214,13 @@ impl World {
                 // Determine sex of the newborn
                 let sex = if rng.gen_bool(0.5) { "male" } else { "female" };
                 let (x, y) = self.index_to_xy(index);
-                self.spawn_person(x, y, self.day, sex.to_owned());
+                let child_id = self.spawn_person(x, y, self.day, sex.to_owned());
+                self.children.insert(child_id, HashSet::new());
+                self.children.entry(index).or_insert_with(HashSet::new).insert(child_id);
+                self.parents.insert(child_id, vec![index, self.mates[index]]);
+                if self.mates[index] != 0 {
+                    self.children.entry(self.mates[index]).or_insert_with(HashSet::new).insert(self.mates[index]);
+                }
             }
         }
     }
@@ -259,7 +262,7 @@ impl World {
                 .next()
                 .map_or(1, |forage| forage);
             // Calculate the likelihood of moving based on human count and forage bounty
-            let difference = human_count - forage_bounty as usize;
+            let difference = human_count as i32 - forage_bounty as i32;
             let move_probability = 
             if human_count == 1 {
                 0.9 // Very likely to move if alone
@@ -279,8 +282,8 @@ impl World {
                     if self.mates[*entity] != 0 {
                         moves.push((self.mates[*entity], (x as i32 + movement.0), y as i32 + movement.1));
                     }
-                    for child in self.children[*entity] {
-                        moves.push((child, (x as i32 + movement.0), y as i32 + movement.1));
+                    for child in self.children[entity].iter() {
+                        moves.push((*child, (x as i32 + movement.0), y as i32 + movement.1));
                     }
                 }
             }
@@ -290,8 +293,8 @@ impl World {
                     let (x, y) = self.index_to_xy(*position);
                     let movement = generate_random_move(&mut rng, x, y);
                     moves.push((*entity, (x as i32 + movement.0), y as i32 + movement.1));
-                    for child in self.children[*entity] {
-                        moves.push((child, (x as i32 + movement.0), y as i32 + movement.1));
+                    for child in self.children[entity].iter() {
+                        moves.push((*child, (x as i32 + movement.0), y as i32 + movement.1));
                     }
                 }
             }
