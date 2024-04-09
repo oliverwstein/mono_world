@@ -354,8 +354,8 @@ fn get_age(day: usize, birthday: usize) -> usize {
 
 fn generate_random_move(rng: &mut rand::rngs::ThreadRng, x:usize, y:usize) -> (i32, i32) {
     let center_reference = 50;
-    let mut move_x = 0;
-    let mut move_y = 0;
+    let mut move_x;
+    let mut move_y;
 
     // Adjust movement probability based on distance from center_reference
     if x < center_reference {

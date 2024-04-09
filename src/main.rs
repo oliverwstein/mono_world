@@ -1,4 +1,3 @@
-use ansi_term::Colour::RGB;
 use rand::Rng;
 use std::process::Command;
 
@@ -50,51 +49,5 @@ fn main() {
         world.females.iter().filter(|&&is_female| is_female).count(), 
         world.mates.iter().filter(|&&mate| mate != 0).count(), 
         world.pregnant.iter().filter(|&&is_pregnant| is_pregnant != 0).count());
-        
-        // let mut counts = vec![0; width*height];
-
-        // world.humans.iter().enumerate()
-        //     .filter(|&(_index, &is_human)| is_human) // Filter to keep only humans
-        //     .for_each(|(index, _)| {
-        //         // Subtract 1 from position to convert from 1-based to 0-based indexing
-        //         let position_index = world.positions[index] - 1;
-        //         if position_index < counts.len() {
-        //             // Increment the count for the human's position
-        //             counts[position_index] += 1;
-        //         }
-        //     });
-
-        // // Find the maximum count for scaling the gradient
-        // let max_count = 20;//counts.iter().flatten().max().copied().unwrap_or(0);
-
-        // for y in 0..height {
-        //     for x in 0..width {
-        //         // Calculate the index for one-indexed flat array, adjusting for 0-based indexing in Rust
-        //         let index = y * width + x; // This calculation suits a zero-indexed array
-        //         let count = counts[index]; // Access the count at this position
-        
-        //         // Determine the color based on 'count'
-        //         let color = if count == 0 {
-        //             RGB(255, 255, 255) // White for empty
-        //         } else {
-        //             let fraction = count as f32 / max_count as f32;
-        //             if fraction < 0.5 {
-        //                 // Transition from white to green
-        //                 let green = 255; // Max green the whole time
-        //                 let red_blue = 255 - (fraction * 2.0 * 255.0) as u8; // Decrease red and blue
-        //                 RGB(red_blue, green, red_blue)
-        //             } else {
-        //                 // Transition from green to red
-        //                 let green = 255 - ((fraction - 0.5) * 2.0 * 255.0) as u8; // Decrease green
-        //                 let red = 255; // Max red the whole time
-        //                 RGB(red, green, 0)
-        //             }
-        //         };
-        
-        //         // Print a colored block without any space between them
-        //         print!("{}", color.paint("██"));
-        //     }
-        //     println!(); // New line for the next row
-        // }
     }
 }
